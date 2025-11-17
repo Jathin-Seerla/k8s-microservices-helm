@@ -6,67 +6,73 @@ on:
   pull_request:
     branches: [ main ]
 
+# GLOBAL ENV
 env:
   REGISTRY: ghcr.io
 
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
+
+    # REQUIRED to push to GHCR
+    permissions:
+      contents: read
+      packages: write
+
     outputs:
       image-tag: ${{ steps.set-tag.outputs.tag }}
       owner: ${{ steps.set-owner.outputs.owner }}
-    steps:
-      - uses: actions/checkout@v4
 
-      # Generate short SHA for image tag
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Generate image tag
       - name: Set image tag
         id: set-tag
         run: echo "tag=${GITHUB_SHA:0:8}" >> $GITHUB_OUTPUT
 
-      # Lowercase GitHub username and output
+      # Lowercase OWNER for GHCR
       - name: Set lowercase OWNER
         id: set-owner
         run: |
           OWNER_LOWER=$(echo "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')
           echo "owner=${OWNER_LOWER}" >> $GITHUB_OUTPUT
 
-      # Logout GHCR if cached
-      - name: Logout GHCR (if cached)
-        run: docker logout ghcr.io || true
-
-      # Login GHCR
+      # Log in to GHCR (using GITHUB_TOKEN)
       - name: Log in to GHCR
-        uses: docker/login-action@v2
+        uses: docker/login-action@v3
         with:
-          registry: ${{ env.REGISTRY }}
+          registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Build & push frontend
+      # Build & push frontend image
       - name: Build & push frontend
-        uses: docker/build-push-action@v4
+        uses: docker/build-push-action@v5
         with:
           context: ./frontend
           file: ./frontend/Dockerfile
           push: true
           tags: |
-            ${{ env.REGISTRY }}/${{ steps.set-owner.outputs.owner }}/k8s-ms-frontend:${{ steps.set-tag.outputs.tag }}
-            ${{ env.REGISTRY }}/${{ steps.set-owner.outputs.owner }}/k8s-ms-frontend:latest
+            ghcr.io/${{ steps.set-owner.outputs.owner }}/k8s-ms-frontend:${{ steps.set-tag.outputs.tag }}
+            ghcr.io/${{ steps.set-owner.outputs.owner }}/k8s-ms-frontend:latest
 
-      # Build & push backend
+      # Build & push backend image
       - name: Build & push backend
-        uses: docker/build-push-action@v4
+        uses: docker/build-push-action@v5
         with:
           context: ./backend
           file: ./backend/Dockerfile
           push: true
           tags: |
-            ${{ env.REGISTRY }}/${{ steps.set-owner.outputs.owner }}/k8s-ms-backend:${{ steps.set-tag.outputs.tag }}
-            ${{ env.REGISTRY }}/${{ steps.set-owner.outputs.owner }}/k8s-ms-backend:latest
+            ghcr.io/${{ steps.set-owner.outputs.owner }}/k8s-ms-backend:${{ steps.set-tag.outputs.tag }}
+            ghcr.io/${{ steps.set-owner.outputs.owner }}/k8s-ms-backend:latest
 
   deploy:
     needs: build-and-push
     runs-on: [self-hosted, Windows, X64]
+
     env:
       IMAGE_TAG: ${{ needs.build-and-push.outputs.image-tag }}
       REGISTRY: ghcr.io
@@ -74,9 +80,9 @@ jobs:
       KUBECONFIG: C:/actions-runner/kubeconfig
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      # Setup kubeconfig file
       - name: Setup Kubeconfig
         shell: pwsh
         env:
@@ -85,25 +91,21 @@ jobs:
           $decoded = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($env:KUBE_CONFIG_DATA))
           $decoded | Out-File -FilePath "C:/actions-runner/kubeconfig" -Encoding UTF8
 
-      # Test kubectl
       - name: Test kubectl
         shell: pwsh
         run: kubectl --kubeconfig "C:/actions-runner/kubeconfig" get nodes
 
-      # Setup Helm
       - name: Setup Helm
         uses: azure/setup-helm@v3
         with:
           version: v3.12.0
 
-      # Deploy with Helm
       - name: Helm upgrade --install with rollback
         shell: pwsh
         run: |
           try {
-            Write-Host "Deploying images:"
-            Write-Host "Frontend: $env:REGISTRY/$env:OWNER/k8s-ms-frontend:$env:IMAGE_TAG"
-            Write-Host "Backend:  $env:REGISTRY/$env:OWNER/k8s-ms-backend:$env:IMAGE_TAG"
+            Write-Host "Deploying frontend=$env:REGISTRY/$env:OWNER/k8s-ms-frontend:$env:IMAGE_TAG"
+            Write-Host "Deploying backend=$env:REGISTRY/$env:OWNER/k8s-ms-backend:$env:IMAGE_TAG"
 
             helm upgrade --install microservices charts/microservices `
               --set frontend.image="$env:REGISTRY/$env:OWNER/k8s-ms-frontend:$env:IMAGE_TAG" `
