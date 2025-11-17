@@ -1,15 +1,14 @@
-{{- if .Values.replicaCount.frontend }}
+{{- if .Values.frontend.enabled }}
 apiVersion: v1
 kind: Service
 metadata:
   name: {{ include "fullname" . }}-frontend
 spec:
+  type: {{ .Values.frontend.service.type }}
   selector:
     app: frontend
-    release: {{ .Release.Name }}
   ports:
-    - port: 80
-      targetPort: 80
+    - port: {{ .Values.frontend.service.port }}
+      targetPort: 3000
       protocol: TCP
-  type: ClusterIP
 {{- end }}
