@@ -1,63 +1,35 @@
 image:
-  registry: ghcr.io
-  owner: OWNER
-  frontend:
-    name: k8s-ms-frontend
-    tag: latest
-  backend:
-    name: k8s-ms-backend
-    tag: latest
+  repository: ghcr.io/OWNER/k8s-ms
+  tag: latest
+  pullPolicy: IfNotPresent
 
-replicaCount:
-  frontend: 2
-  backend: 2
-
-resources:
-  frontend:
-    requests:
-      cpu: 100m
-      memory: 128Mi
-    limits:
-      cpu: 500m
-      memory: 512Mi
-  backend:
-    requests:
-      cpu: 200m
-      memory: 256Mi
-    limits:
-      cpu: 1000m
-      memory: 1Gi
-
-livenessProbe:
-  initialDelaySeconds: 10
-  periodSeconds: 10
-  failureThreshold: 3
-
-readinessProbe:
-  initialDelaySeconds: 5
-  periodSeconds: 5
-  failureThreshold: 3
-
-hpa:
+frontend:
   enabled: true
-  minReplicas: 2
-  maxReplicas: 5
-  targetCPUUtilizationPercentage: 60
+  image: ""
+  replicas: 2
+  service:
+    type: ClusterIP
+    port: 3000
+  env:
+    BACKEND_URL: "http://backend:5000"
 
-ingress:
+backend:
   enabled: true
-  host: example.local
-  annotations:
-    kubernetes.io/ingress.class: nginx
-    nginx.ingress.kubernetes.io/proxy-body-size: "8m"
+  image: ""
+  replicas: 2
+  service:
+    type: ClusterIP
+    port: 5000
 
 redis:
   enabled: true
-  image: redis:7.0-alpine
-  resources:
-    requests:
-      cpu: 50m
-      memory: 64Mi
-    limits:
-      cpu: 200m
-      memory: 256Mi
+  image: "redis:7.0-alpine"
+  replicas: 1
+  service:
+    type: ClusterIP
+    port: 6379
+
+ingress:
+  enabled: false
+  host: chart-example.local
+  annotations: {}
