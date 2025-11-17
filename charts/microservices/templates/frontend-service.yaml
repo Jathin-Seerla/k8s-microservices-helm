@@ -1,0 +1,15 @@
+{{- if .Values.replicaCount.frontend }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "fullname" . }}-frontend
+spec:
+  selector:
+    app: frontend
+    release: {{ .Release.Name }}
+  ports:
+    - port: 80
+      targetPort: 80
+      protocol: TCP
+  type: ClusterIP
+{{- end }}
