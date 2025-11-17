@@ -95,11 +95,12 @@ jobs:
         run: |
           set -e
           echo "Deploying images: frontend=$REGISTRY/$OWNER/k8s-ms-frontend:$IMAGE_TAG, backend=$REGISTRY/$OWNER/k8s-ms-backend:$IMAGE_TAG"
-          helm upgrade --install microservices charts/microservices \
-            --set frontend.image=$REGISTRY/$OWNER/k8s-ms-frontend:$IMAGE_TAG \
-            --set backend.image=$REGISTRY/$OWNER/k8s-ms-backend:$IMAGE_TAG \
-            --kubeconfig C:\actions-runner\kubeconfig \
+          helm upgrade --install microservices charts/microservices `
+            --set frontend.image=$REGISTRY/$OWNER/k8s-ms-frontend:$IMAGE_TAG `
+            --set backend.image=$REGISTRY/$OWNER/k8s-ms-backend:$IMAGE_TAG `
+            --kubeconfig C:\actions-runner\kubeconfig `
             --wait --timeout 5m || (
               echo "Deployment failed, rolling back..."
               helm rollback microservices 1 --kubeconfig C:\actions-runner\kubeconfig
-              ex
+              exit 1
+            )
