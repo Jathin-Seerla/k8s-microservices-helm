@@ -68,10 +68,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # Setup kubectl with a supported version
       - name: Setup kubectl
         uses: azure/setup-kubectl@v3
         with:
-          version: '1.27.0'
+          version: '1.26.8'  # fixed from 1.27.0 to avoid "not found" error
 
       - name: Decode Kubeconfig
         env:
