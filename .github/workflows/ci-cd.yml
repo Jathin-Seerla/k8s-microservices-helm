@@ -27,11 +27,11 @@ jobs:
       - name: Set lowercase OWNER
         run: echo "OWNER=${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_ENV
 
-      # Ensure no cached login
+      # Logout GHCR if cached
       - name: Logout GHCR (if cached)
         run: docker logout ghcr.io || true
 
-      # Log in to GitHub Container Registry
+      # Log in to GHCR
       - name: Log in to GHCR
         uses: docker/login-action@v2
         with:
@@ -63,31 +63,26 @@ jobs:
 
   deploy:
     needs: build-and-push
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
+    env:
+      KUBECONFIG: C:\actions-runner\kubeconfig
+      IMAGE_TAG: ${{ env.tag }}
+      REGISTRY: ${{ env.REGISTRY }}
+      OWNER: ${{ env.OWNER }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Setup kubectl with a supported version
-      - name: Setup kubectl
-        uses: azure/setup-kubectl@v3
-        with:
-          version: 'latest'
-
-      # Setup Kubeconfig and export KUBECONFIG
+      # Setup kubeconfig from secret
       - name: Setup Kubeconfig
         env:
           KUBE_CONFIG_DATA: ${{ secrets.KUBE_CONFIG }}
         run: |
-          # If secret is plain YAML, remove base64 decode
-          echo "$KUBE_CONFIG_DATA" > kubeconfig
-          export KUBECONFIG=$PWD/kubeconfig
-          kubectl config view
+          echo "$KUBE_CONFIG_DATA" | base64 --decode > C:\actions-runner\kubeconfig
 
       # Test kubectl connectivity
       - name: Test kubectl
-        run: |
-          kubectl get nodes
+        run: kubectl --kubeconfig C:\actions-runner\kubeconfig get nodes
 
       # Setup Helm
       - name: Setup Helm
@@ -97,13 +92,9 @@ jobs:
 
       # Helm deploy
       - name: Helm upgrade --install
-        env:
-          KUBECONFIG: $PWD/kubeconfig
-          IMAGE_TAG: ${{ env.tag }}
-          REGISTRY: ${{ env.REGISTRY }}
-          OWNER: ${{ env.OWNER }}
         run: |
           helm upgrade --install microservices charts/microservices \
             --set frontend.image=${{ env.REGISTRY }}/${{ env.OWNER }}/k8s-ms-frontend:${IMAGE_TAG} \
             --set backend.image=${{ env.REGISTRY }}/${{ env.OWNER }}/k8s-ms-backend:${IMAGE_TAG} \
+            --kubeconfig C:\actions-runner\kubeconfig \
             --wait --timeout 5m
