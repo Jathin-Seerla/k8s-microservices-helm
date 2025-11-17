@@ -6,14 +6,13 @@ on:
   pull_request:
     branches: [ main ]
 
-# MUST be at the top level — allows writing to GHCR
+# REQUIRED: Allow pushing images to GHCR
 permissions:
   contents: read
   packages: write
 
 env:
   REGISTRY: ghcr.io
-  OWNER: jathin-seerla    # <-- SET OWNER HERE (lowercase, your GitHub username)
 
 jobs:
   build-and-push:
@@ -26,12 +25,16 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Generate tag from commit SHA
+      # Generate short SHA tag
       - name: Set image tag
         id: set-tag
-        run: echo "tag=${GITHUB_SHA:0:8}" >> $GITHUB_OUTPUT
+        run: echo "tag=${GITHUB_SHA::8}" >> $GITHUB_OUTPUT
 
-      # Login to GHCR
+      # Lowercase username for GHCR
+      - name: Set lowercase OWNER
+        run: echo "OWNER=${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_ENV
+
+      # Login to GHCR using GITHUB_TOKEN (GHCR_PAT not required)
       - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
@@ -63,49 +66,43 @@ jobs:
 
   deploy:
     needs: build-and-push
-    runs-on: [self-hosted, Windows, X64]
+    runs-on: ubuntu-latest
 
     env:
       IMAGE_TAG: ${{ needs.build-and-push.outputs.image-tag }}
-      REGISTRY: ghcr.io
-      OWNER: jathin-seerla
-      KUBECONFIG: C:/actions-runner/kubeconfig
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Kubeconfig
-        shell: pwsh
+      # Setup kubectl (corrected – only one version)
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: "1.26.8"
+
+      # Load kubeconfig
+      - name: Decode Kubeconfig
         env:
           KUBE_CONFIG_DATA: ${{ secrets.KUBE_CONFIG }}
         run: |
-          $decoded = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($env:KUBE_CONFIG_DATA))
-          $decoded | Out-File -FilePath "C:/actions-runner/kubeconfig" -Encoding UTF8
+          echo "$KUBE_CONFIG_DATA" | base64 --decode > kubeconfig
+          export KUBECONFIG=$PWD/kubeconfig
+          kubectl config view
 
-      - name: Test kubectl
-        shell: pwsh
-        run: kubectl --kubeconfig "C:/actions-runner/kubeconfig" get nodes
-
+      # Setup Helm
       - name: Setup Helm
         uses: azure/setup-helm@v3
         with:
           version: v3.12.0
 
-      - name: Helm upgrade --install with rollback
-        shell: pwsh
+      # Deploy Helm chart
+      - name: Helm upgrade --install
+        env:
+          OWNER: ${{ env.OWNER }}
+          REGISTRY: ${{ env.REGISTRY }}
         run: |
-          try {
-            Write-Host "Deploying frontend=$env:REGISTRY/$env:OWNER/k8s-ms-frontend:$env:IMAGE_TAG"
-            Write-Host "Deploying backend=$env:REGISTRY/$env:OWNER/k8s-ms-backend:$env:IMAGE_TAG"
-
-            helm upgrade --install microservices charts/microservices `
-              --set frontend.image="$env:REGISTRY/$env:OWNER/k8s-ms-frontend:$env:IMAGE_TAG" `
-              --set backend.image="$env:REGISTRY/$env:OWNER/k8s-ms-backend:$env:IMAGE_TAG" `
-              --kubeconfig "C:/actions-runner/kubeconfig" `
-              --wait --timeout 5m
-          } catch {
-            Write-Host "Deployment failed, rolling back..."
-            helm rollback microservices 1 --kubeconfig "C:/actions-runner/kubeconfig"
-            exit 1
-          }
+          helm upgrade --install microservices charts/microservices \
+            --set frontend.image=${REGISTRY}/${OWNER}/k8s-ms-frontend:${IMAGE_TAG} \
+            --set backend.image=${REGISTRY}/${OWNER}/k8s-ms-backend:${IMAGE_TAG} \
+            --wait --timeout 5m
