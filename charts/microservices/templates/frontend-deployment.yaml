@@ -1,40 +1,25 @@
-{{- if .Values.replicaCount.frontend }}
+{{- if .Values.frontend.enabled }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ include "fullname" . }}-frontend
 spec:
-  replicas: {{ .Values.replicaCount.frontend }}
+  replicas: {{ .Values.frontend.replicas }}
   selector:
     matchLabels:
       app: frontend
-      release: {{ .Release.Name }}
   template:
     metadata:
       labels:
         app: frontend
-        release: {{ .Release.Name }}
     spec:
       containers:
         - name: frontend
-          image: "{{ .Values.image.registry }}/{{ .Values.image.owner }}/{{ .Values.image.frontend.name }}:{{ .Values.image.frontend.tag }}"
-          imagePullPolicy: IfNotPresent
+          image: {{ default (printf "%s/frontend:%s" .Values.image.repository .Values.image.tag) .Values.frontend.image }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
-            - containerPort: 80
-          resources:
-{{ toYaml .Values.resources.frontend | indent 12 }}
-          livenessProbe:
-            httpGet:
-              path: /
-              port: 80
-            initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
-            periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
-            failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
-          readinessProbe:
-            httpGet:
-              path: /
-              port: 80
-            initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
-            periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
-            failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+            - containerPort: 3000
+          env:
+            - name: BACKEND_URL
+              value: "{{ .Values.frontend.env.BACKEND_URL }}"
 {{- end }}
