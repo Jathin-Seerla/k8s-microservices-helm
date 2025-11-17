@@ -68,21 +68,24 @@ jobs:
       IMAGE_TAG: ${{ needs.build-and-push.outputs.image-tag }}
       REGISTRY: ${{ env.REGISTRY }}
       OWNER: ${{ env.OWNER }}
-      KUBECONFIG: C:\actions-runner\kubeconfig
+      KUBECONFIG: C:/actions-runner/kubeconfig
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
       # Setup kubeconfig from secret
       - name: Setup Kubeconfig
+        shell: pwsh
         env:
           KUBE_CONFIG_DATA: ${{ secrets.KUBE_CONFIG }}
         run: |
-          echo "$KUBE_CONFIG_DATA" | base64 --decode > C:\actions-runner\kubeconfig
+          $decoded = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($env:KUBE_CONFIG_DATA))
+          $decoded | Out-File -FilePath "C:/actions-runner/kubeconfig" -Encoding UTF8
 
       # Test kubectl connectivity
       - name: Test kubectl
-        run: kubectl --kubeconfig C:\actions-runner\kubeconfig get nodes
+        shell: pwsh
+        run: kubectl --kubeconfig "C:/actions-runner/kubeconfig" get nodes
 
       # Setup Helm
       - name: Setup Helm
@@ -92,15 +95,17 @@ jobs:
 
       # Helm deploy with rollback
       - name: Helm upgrade --install with rollback
+        shell: pwsh
         run: |
-          set -e
-          echo "Deploying images: frontend=$REGISTRY/$OWNER/k8s-ms-frontend:$IMAGE_TAG, backend=$REGISTRY/$OWNER/k8s-ms-backend:$IMAGE_TAG"
-          helm upgrade --install microservices charts/microservices `
-            --set frontend.image=$REGISTRY/$OWNER/k8s-ms-frontend:$IMAGE_TAG `
-            --set backend.image=$REGISTRY/$OWNER/k8s-ms-backend:$IMAGE_TAG `
-            --kubeconfig C:\actions-runner\kubeconfig `
-            --wait --timeout 5m || (
-              echo "Deployment failed, rolling back..."
-              helm rollback microservices 1 --kubeconfig C:\actions-runner\kubeconfig
-              exit 1
-            )
+          try {
+            Write-Host "Deploying images: frontend=$env:REGISTRY/$env:OWNER/k8s-ms-frontend:$env:IMAGE_TAG, backend=$env:REGISTRY/$env:OWNER/k8s-ms-backend:$env:IMAGE_TAG"
+            helm upgrade --install microservices charts/microservices `
+              --set frontend.image="$env:REGISTRY/$env:OWNER/k8s-ms-frontend:$env:IMAGE_TAG" `
+              --set backend.image="$env:REGISTRY/$env:OWNER/k8s-ms-backend:$env:IMAGE_TAG" `
+              --kubeconfig "C:/actions-runner/kubeconfig" `
+              --wait --timeout 5m
+          } catch {
+            Write-Host "Deployment failed, rolling back..."
+            helm rollback microservices 1 --kubeconfig "C:/actions-runner/kubeconfig"
+            exit 1
+          }
