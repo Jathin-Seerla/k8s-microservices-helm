@@ -1,15 +1,14 @@
-{{- if .Values.replicaCount.backend }}
+{{- if .Values.backend.enabled }}
 apiVersion: v1
 kind: Service
 metadata:
   name: {{ include "fullname" . }}-backend
 spec:
+  type: {{ .Values.backend.service.type }}
   selector:
     app: backend
-    release: {{ .Release.Name }}
   ports:
-    - port: 8000
-      targetPort: 8000
+    - port: {{ .Values.backend.service.port }}
+      targetPort: 5000
       protocol: TCP
-  type: ClusterIP
 {{- end }}
