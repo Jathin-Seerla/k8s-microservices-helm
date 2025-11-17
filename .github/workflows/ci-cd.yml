@@ -65,10 +65,10 @@ jobs:
     needs: build-and-push
     runs-on: [self-hosted, Windows, X64]
     env:
-      KUBECONFIG: C:\actions-runner\kubeconfig
       IMAGE_TAG: ${{ needs.build-and-push.outputs.image-tag }}
       REGISTRY: ${{ env.REGISTRY }}
       OWNER: ${{ env.OWNER }}
+      KUBECONFIG: C:\actions-runner\kubeconfig
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -82,8 +82,7 @@ jobs:
 
       # Test kubectl connectivity
       - name: Test kubectl
-        run: |
-          kubectl --kubeconfig C:\actions-runner\kubeconfig get nodes
+        run: kubectl --kubeconfig C:\actions-runner\kubeconfig get nodes
 
       # Setup Helm
       - name: Setup Helm
@@ -95,13 +94,12 @@ jobs:
       - name: Helm upgrade --install with rollback
         run: |
           set -e
-          echo "Deploying images: frontend=${REGISTRY}/${OWNER}/k8s-ms-frontend:${IMAGE_TAG}, backend=${REGISTRY}/${OWNER}/k8s-ms-backend:${IMAGE_TAG}"
+          echo "Deploying images: frontend=$REGISTRY/$OWNER/k8s-ms-frontend:$IMAGE_TAG, backend=$REGISTRY/$OWNER/k8s-ms-backend:$IMAGE_TAG"
           helm upgrade --install microservices charts/microservices \
-            --set frontend.image=${REGISTRY}/${OWNER}/k8s-ms-frontend:${IMAGE_TAG} \
-            --set backend.image=${REGISTRY}/${OWNER}/k8s-ms-backend:${IMAGE_TAG} \
+            --set frontend.image=$REGISTRY/$OWNER/k8s-ms-frontend:$IMAGE_TAG \
+            --set backend.image=$REGISTRY/$OWNER/k8s-ms-backend:$IMAGE_TAG \
             --kubeconfig C:\actions-runner\kubeconfig \
             --wait --timeout 5m || (
               echo "Deployment failed, rolling back..."
               helm rollback microservices 1 --kubeconfig C:\actions-runner\kubeconfig
-              exit 1
-            )
+              ex
