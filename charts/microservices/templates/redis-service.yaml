@@ -4,10 +4,11 @@ kind: Service
 metadata:
   name: {{ include "fullname" . }}-redis
 spec:
+  type: {{ .Values.redis.service.type }}
   selector:
     app: redis
   ports:
-    - port: 6379
+    - port: {{ .Values.redis.service.port }}
       targetPort: 6379
-  type: ClusterIP
+      protocol: TCP
 {{- end }}
