@@ -72,23 +72,33 @@ jobs:
       - name: Setup kubectl
         uses: azure/setup-kubectl@v3
         with:
-          version: 'latest'  # fixed from 1.27.0 to avoid "not found" error
+          version: 'latest'
 
-      - name: Decode Kubeconfig
+      # Setup Kubeconfig and export KUBECONFIG
+      - name: Setup Kubeconfig
         env:
           KUBE_CONFIG_DATA: ${{ secrets.KUBE_CONFIG }}
         run: |
-          echo "$KUBE_CONFIG_DATA" | base64 --decode > kubeconfig
+          # If secret is plain YAML, remove base64 decode
+          echo "$KUBE_CONFIG_DATA" > kubeconfig
           export KUBECONFIG=$PWD/kubeconfig
           kubectl config view
 
+      # Test kubectl connectivity
+      - name: Test kubectl
+        run: |
+          kubectl get nodes
+
+      # Setup Helm
       - name: Setup Helm
         uses: azure/setup-helm@v3
         with:
           version: v3.12.0
 
+      # Helm deploy
       - name: Helm upgrade --install
         env:
+          KUBECONFIG: $PWD/kubeconfig
           IMAGE_TAG: ${{ env.tag }}
           REGISTRY: ${{ env.REGISTRY }}
           OWNER: ${{ env.OWNER }}
@@ -97,4 +107,3 @@ jobs:
             --set frontend.image=${{ env.REGISTRY }}/${{ env.OWNER }}/k8s-ms-frontend:${IMAGE_TAG} \
             --set backend.image=${{ env.REGISTRY }}/${{ env.OWNER }}/k8s-ms-backend:${IMAGE_TAG} \
             --wait --timeout 5m
-
