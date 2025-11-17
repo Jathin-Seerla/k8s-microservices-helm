@@ -21,7 +21,7 @@ jobs:
       # Generate short SHA for image tag
       - name: Set image tag
         id: set-tag
-        run: echo "tag=${GITHUB_SHA::8}" >> $GITHUB_ENV
+        run: echo "::set-output name=tag::${GITHUB_SHA::8}"
 
       # Lowercase GitHub username for GHCR image paths
       - name: Set lowercase OWNER
@@ -47,7 +47,7 @@ jobs:
           file: ./frontend/Dockerfile
           push: true
           tags: |
-            ${{ env.REGISTRY }}/${{ env.OWNER }}/k8s-ms-frontend:${{ env.tag }}
+            ${{ env.REGISTRY }}/${{ env.OWNER }}/k8s-ms-frontend:${{ steps.set-tag.outputs.tag }}
             ${{ env.REGISTRY }}/${{ env.OWNER }}/k8s-ms-frontend:latest
 
       # Build & push backend Docker image
@@ -58,15 +58,15 @@ jobs:
           file: ./backend/Dockerfile
           push: true
           tags: |
-            ${{ env.REGISTRY }}/${{ env.OWNER }}/k8s-ms-backend:${{ env.tag }}
+            ${{ env.REGISTRY }}/${{ env.OWNER }}/k8s-ms-backend:${{ steps.set-tag.outputs.tag }}
             ${{ env.REGISTRY }}/${{ env.OWNER }}/k8s-ms-backend:latest
 
   deploy:
     needs: build-and-push
-    runs-on: self-hosted
+    runs-on: [self-hosted, Windows, X64]
     env:
       KUBECONFIG: C:\actions-runner\kubeconfig
-      IMAGE_TAG: ${{ env.tag }}
+      IMAGE_TAG: ${{ needs.build-and-push.outputs.image-tag }}
       REGISTRY: ${{ env.REGISTRY }}
       OWNER: ${{ env.OWNER }}
     steps:
