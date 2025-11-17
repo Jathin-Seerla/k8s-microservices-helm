@@ -1,41 +1,22 @@
-{{- $name := include "fullname" . }} 
-{{- if .Values.replicaCount.backend }}
+{{- if .Values.backend.enabled }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ $name }}-backend
+  name: {{ include "fullname" . }}-backend
 spec:
-  replicas: {{ .Values.replicaCount.backend }}
+  replicas: {{ .Values.backend.replicas }}
   selector:
     matchLabels:
       app: backend
-      release: {{ .Release.Name }}
   template:
     metadata:
       labels:
         app: backend
-        release: {{ .Release.Name }}
     spec:
       containers:
         - name: backend
-          image: "{{ .Values.image.registry }}/{{ .Values.image.owner }}/{{ .Values.image.backend.name }}:{{ .Values.image.backend.tag }}"
-          imagePullPolicy: IfNotPresent
+          image: {{ default (printf "%s/backend:%s" .Values.image.repository .Values.image.tag) .Values.backend.image }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
-            - containerPort: 8000
-          resources:
-{{ toYaml .Values.resources.backend | indent 12 }}
-          livenessProbe:
-            httpGet:
-              path: /health
-              port: 8000
-            initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
-            periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
-            failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
-          readinessProbe:
-            httpGet:
-              path: /health
-              port: 8000
-            initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
-            periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
-            failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+            - containerPort: 5000
 {{- end }}
