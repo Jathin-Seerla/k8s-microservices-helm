@@ -1,8 +1,10 @@
 name: CI/CD - Helm Microservices
 
+# Trigger on pull requests to main OR manual run
 on:
   pull_request:
-    branches: [ main ]
+    branches: [main]
+  workflow_dispatch:  # Allows manual run
 
 permissions:
   contents: read
@@ -14,27 +16,29 @@ jobs:
     outputs:
       image-tag: ${{ steps.set-tag.outputs.tag }}
       owner: ${{ steps.set-owner.outputs.owner }}
+
     steps:
+      # 1️⃣ Checkout repo
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Set Docker image tag
+      # 2️⃣ Set Docker image tag (first 8 chars of commit SHA)
       - name: Set image tag
         id: set-tag
         run: echo "tag=${GITHUB_SHA::8}" >> $GITHUB_OUTPUT
 
-      # Lowercase OWNER for GHCR namespace
+      # 3️⃣ Set lowercase OWNER for GHCR
       - name: Set lowercase OWNER
         id: set-owner
         run: |
           echo "OWNER=${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_ENV
           echo "owner=${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_OUTPUT
 
-      # Logout any cached GHCR login
+      # 4️⃣ Logout any cached GHCR login
       - name: Logout GHCR (if cached)
         run: docker logout ghcr.io || true
 
-      # Login to GHCR
+      # 5️⃣ Login to GHCR
       - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
@@ -42,7 +46,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Build & push frontend
+      # 6️⃣ Build & push frontend
       - name: Build & push frontend
         uses: docker/build-push-action@v4
         with:
@@ -53,7 +57,7 @@ jobs:
             ghcr.io/${{ steps.set-owner.outputs.owner }}/k8s-ms-frontend:${{ steps.set-tag.outputs.tag }}
             ghcr.io/${{ steps.set-owner.outputs.owner }}/k8s-ms-frontend:latest
 
-      # Build & push backend
+      # 7️⃣ Build & push backend
       - name: Build & push backend
         uses: docker/build-push-action@v4
         with:
@@ -71,17 +75,19 @@ jobs:
       IMAGE_TAG: ${{ needs.build-and-push.outputs.image-tag }}
       REGISTRY: ghcr.io
       OWNER: ${{ needs.build-and-push.outputs.owner }}
+
     steps:
+      # 1️⃣ Checkout repo
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Setup kubectl
+      # 2️⃣ Setup kubectl
       - name: Setup kubectl
         uses: azure/setup-kubectl@v3
         with:
           version: '1.26.8'
 
-      # Decode kubeconfig
+      # 3️⃣ Decode Kubeconfig
       - name: Decode Kubeconfig
         env:
           KUBE_CONFIG_DATA: ${{ secrets.KUBE_CONFIG }}
@@ -90,13 +96,13 @@ jobs:
           export KUBECONFIG=$PWD/kubeconfig
           kubectl config view
 
-      # Setup Helm
+      # 4️⃣ Setup Helm
       - name: Setup Helm
         uses: azure/setup-helm@v3
         with:
           version: v3.12.0
 
-      # Deploy Helm chart
+      # 5️⃣ Deploy Helm chart
       - name: Helm upgrade --install
         run: |
           echo "Deploying frontend: $REGISTRY/$OWNER/k8s-ms-frontend:$IMAGE_TAG"
