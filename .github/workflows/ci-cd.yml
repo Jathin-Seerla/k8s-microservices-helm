@@ -1,32 +1,24 @@
-name: CI/CD
+name: CI/CD - Helm Microservices
 
 on:
-  push:
-    branches: [ main ]
   pull_request:
     branches: [ main ]
 
-# Top-level permissions (required for GHCR push)
 permissions:
   contents: read
   packages: write
 
-env:
-  REGISTRY: ghcr.io
-
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
-
     outputs:
       image-tag: ${{ steps.set-tag.outputs.tag }}
       owner: ${{ steps.set-owner.outputs.owner }}
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Generate short SHA tag
+      # Set Docker image tag
       - name: Set image tag
         id: set-tag
         run: echo "tag=${GITHUB_SHA::8}" >> $GITHUB_OUTPUT
@@ -34,13 +26,15 @@ jobs:
       # Lowercase OWNER for GHCR namespace
       - name: Set lowercase OWNER
         id: set-owner
-        run: echo "owner=${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_OUTPUT
+        run: |
+          echo "OWNER=${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_ENV
+          echo "owner=${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_OUTPUT
 
-      # Log out if any cached login exists
+      # Logout any cached GHCR login
       - name: Logout GHCR (if cached)
         run: docker logout ghcr.io || true
 
-      # Log in to GHCR using GITHUB_TOKEN
+      # Login to GHCR
       - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
@@ -50,7 +44,7 @@ jobs:
 
       # Build & push frontend
       - name: Build & push frontend
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v4
         with:
           context: ./frontend
           file: ./frontend/Dockerfile
@@ -61,7 +55,7 @@ jobs:
 
       # Build & push backend
       - name: Build & push backend
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v4
         with:
           context: ./backend
           file: ./backend/Dockerfile
@@ -73,22 +67,21 @@ jobs:
   deploy:
     needs: build-and-push
     runs-on: ubuntu-latest
-
     env:
       IMAGE_TAG: ${{ needs.build-and-push.outputs.image-tag }}
       REGISTRY: ghcr.io
       OWNER: ${{ needs.build-and-push.outputs.owner }}
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Setup kubectl (ONLY ONE VERSION)
+      # Setup kubectl
       - name: Setup kubectl
         uses: azure/setup-kubectl@v3
         with:
           version: '1.26.8'
 
+      # Decode kubeconfig
       - name: Decode Kubeconfig
         env:
           KUBE_CONFIG_DATA: ${{ secrets.KUBE_CONFIG }}
@@ -97,17 +90,18 @@ jobs:
           export KUBECONFIG=$PWD/kubeconfig
           kubectl config view
 
+      # Setup Helm
       - name: Setup Helm
         uses: azure/setup-helm@v3
         with:
           version: v3.12.0
 
+      # Deploy Helm chart
       - name: Helm upgrade --install
         run: |
           echo "Deploying frontend: $REGISTRY/$OWNER/k8s-ms-frontend:$IMAGE_TAG"
           echo "Deploying backend:  $REGISTRY/$OWNER/k8s-ms-backend:$IMAGE_TAG"
-
           helm upgrade --install microservices charts/microservices \
-            --set frontend.image=$REGISTRY/$OWNER/k8s-ms-frontend:$IMAGE_TAG \
-            --set backend.image=$REGISTRY/$OWNER/k8s-ms-backend:$IMAGE_TAG \
+            --set frontend.image="${REGISTRY}/${OWNER}/k8s-ms-frontend:${IMAGE_TAG}" \
+            --set backend.image="${REGISTRY}/${OWNER}/k8s-ms-backend:${IMAGE_TAG}" \
             --wait --timeout 5m
